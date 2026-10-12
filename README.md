@@ -43,6 +43,11 @@ pip install -r requirements.txt
 Coloca los datos crudos en `data/raw/` (no se versionan en git):
 `winequality-red.csv` y `winequality-white.csv`, descargados de UCI.
 
+> **Importante:** todos los comandos de este README (`python`, `mlflow run`,
+> `mlflow ui`) deben ejecutarse **con el entorno `.venv` activado**. Si tienes otro
+> Python/MLflow instalado globalmente, invocar `mlflow` sin activar el entorno usa
+> esa otra versión y puede fallar (ver [Solución de problemas](#solución-de-problemas)).
+
 ## Cómo ejecutar el entrenamiento
 
 ### Opción 1: script directo
@@ -97,6 +102,7 @@ python -m wine_quality.modeling.train --model xgb  --n-estimators 300 --learning
 El tracking es local: corridas en `mlflow.db` (SQLite) y artefactos en `mlartifacts/`.
 
 ```powershell
+.venv\Scripts\activate
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
 
@@ -117,6 +123,25 @@ Cada corrida incluye además la figura `figures/evaluation_test.png`, la tabla
   escalado) vive dentro del pipeline, ajustado únicamente con train.
 - El notebook de la Actividad 2 se conserva en `notebooks/` **solo como registro del
   EDA**; la lógica reproducible vive en el paquete `wine_quality/`.
+
+## Solución de problemas
+
+**`MlflowException: Detected out-of-date database schema ... run 'mlflow db upgrade'`**
+al abrir `mlflow ui`: el comando se ejecutó con un MLflow distinto al del proyecto
+(p. ej. uno instalado en el Python global, más antiguo que el de `.venv`, que fue el
+que creó `mlflow.db`). **No ejecutes `mlflow db upgrade`** — la base no está
+desactualizada, el MLflow lanzado sí. Activa el entorno y vuelve a intentar:
+
+```powershell
+.venv\Scripts\activate
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+o invoca directamente el ejecutable del entorno:
+
+```powershell
+.venv\Scripts\mlflow.exe ui --backend-store-uri sqlite:///mlflow.db
+```
 
 ## Organización del proyecto
 
