@@ -239,13 +239,16 @@ o invoca directamente el ejecutable del entorno:
         └── predict.py         <- Inferencia batch con un modelo registrado en MLflow
 ```
 
-## Declaración de uso de inteligencia artificial
+## Generar el PDF de entrega
 
-Anthropic. (2026). *Claude Code (basado en Claude Opus 5.5 y Claude Fable 5)* [Modelo de
-lenguaje grande], utilizado para edición de código y gestión del repositorio.
-https://claude.com/claude-code
+El documento de entrega vive en [`reports/Entregable.md`](reports/Entregable.md)
+(con sus capturas en `reports/mlflow_screenshots/`). Para exportarlo a PDF con el
+formato requerido (Arial 11 pt, interlineado 1.5, márgenes de 2.5 cm):
 
-El proyecto se realizó mediante un esquema **human-in-the-loop**: cada decisión de
-diseño (estructura del proyecto, patrones utilizados, modelos e hiperparámetros a
-explorar, criterios de selección y validación) fue dirigida, revisada y aprobada por
-el autor, iterando sobre las propuestas y el código generados con la herramienta.
+```powershell
+python reports/make_pdf.py     # o: make pdf
+```
+
+El script convierte el Markdown a HTML y lo imprime con Microsoft Edge en modo
+headless (incluido en Windows; acepta Chrome como alternativa). El resultado queda en
+`reports/TC5061_Experimentacion_MLFlow_SalazarVictor.pdf`.

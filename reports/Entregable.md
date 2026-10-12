@@ -123,9 +123,6 @@ Desde la perspectiva de MLOps, el ejercicio también tiene límites claros:
 
 ---
 
-**Reproducibilidad:** semilla fija y registrada por corrida; `requirements.txt` con versiones
-fijadas; README con instrucciones exactas de ejecución.
-
 **Declaración de uso de IA:** Anthropic. (2026). *Claude Code (Claude Opus 5.5 y Claude Fable 5)*
 [Modelo de lenguaje grande], utilizado para edición de código y gestión del repositorio bajo un
 esquema *human-in-the-loop* (decisiones dirigidas, revisadas y aprobadas por el autor).
