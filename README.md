@@ -106,11 +106,26 @@ python -m wine_quality.modeling.tune --tune-param max_depth --values 3,4,5,6,7 `
 
 o con MLproject: `mlflow run . -e tune --env-manager local -P tune_param=max_depth -P values=3,4,5,6,7 -P model=xgb ...`
 
-Entrena una corrida completa por valor (hijas anidadas bajo una corrida padre
-`tune_<param>`), selecciona el mejor por `val_rmse` (test no participa) y sube
-la **curva de validación** (RMSE train vs val contra el hiperparámetro) como
-artefacto del padre. Buscables: `n_estimators`, `max_depth`, `min_samples_leaf`,
-`learning_rate`, `imputer`, `normalizer`, `scaler`.
+> **Nota:** una sola llamada genera **varias corridas en MLflow**: 1 corrida padre
+> `tune_<param>` + 1 corrida hija (*child run*) por cada valor probado. El ejemplo
+> de arriba (5 valores) crea 6 corridas:
+>
+> ```
+> tune_max_depth_xgb                      <- padre: resumen del sweep
+> ├── xgb_ne1000_md3_lr0.05_es50          <- hija: max_depth=3
+> ├── xgb_ne1000_md4_lr0.05_es50          <- hija: max_depth=4
+> ├── xgb_ne1000_md5_lr0.05_es50          <- hija: max_depth=5
+> ├── xgb_ne1000_md6_lr0.05_es50          <- hija: max_depth=6
+> └── xgb_ne1000_md7_lr0.05_es50          <- hija: max_depth=7
+> ```
+
+Cada hija es una corrida de entrenamiento completa (parámetros, métricas, figura
+y modelo, igual que las de `train.py`); el padre registra el resumen del sweep
+(`tune_param`, valores probados, `best_value`, `best_val_rmse`) y la **curva de
+validación** (RMSE train vs val contra el hiperparámetro) como artefacto. La
+selección del mejor valor es por `val_rmse` (test no participa). En la UI las
+hijas aparecen anidadas bajo el padre. Buscables: `n_estimators`, `max_depth`,
+`min_samples_leaf`, `learning_rate`, `imputer`, `normalizer`, `scaler`.
 
 ### Corridas del experimento comparativo
 
