@@ -20,8 +20,19 @@ python -m wine_quality.modeling.train
 python -m wine_quality.modeling.train --model rf --n-estimators 300 --max-depth 12 --normalizer none --scaler none
 ```
 
-También es ejecutable como proyecto MLflow: `mlflow run . --env-manager local -P model=rf -P n_estimators=300`.
-Las instrucciones completas (instalación, datos, tabla de argumentos) están en el README del repositorio.
+El proyecto es además un **proyecto MLflow** (`MLproject`), de modo que las mismas corridas
+se lanzan con `mlflow run`, pasando los hiperparámetros con `-P`:
+
+```
+$env:MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"
+mlflow run . --env-manager local --experiment-name TC5061_Actividad3_Experimentacion `
+    -P model=rf -P n_estimators=300 -P max_depth=12 -P normalizer=none -P scaler=none
+```
+
+Ambas vías ejecutan el mismo `train.py` y registran corridas idénticas en el experimento:
+el `MLproject` declara el superset de parámetros y su comando invoca el script. Las
+instrucciones completas (instalación, datos, tabla de argumentos) están en el README del
+repositorio.
 
 ## 2. Experimento registrado
 
@@ -56,17 +67,24 @@ validación lado a lado:
 
 ![Tabla comparativa de corridas en MLflow](mlflow_screenshots/mlflow_tabla_corridas.png)
 
-**Captura 2 — Detalle de la corrida campeona** `rf_ne300_md12_msl1_sin-norm_sin-esc`:
+**Captura 2 — Parámetros registrados por corrida**: cada argumento de la CLI
+(`model`, `n_estimators`, `max_depth`, `learning_rate`, `normalizer`, `scaler` y la
+`seed`) queda como parámetro de la corrida, lo que vuelve toda configuración comparable
+y reproducible desde la interfaz:
+
+![Parámetros registrados por corrida](mlflow_screenshots/mlflow_tabla_parametros.png)
+
+**Captura 3 — Detalle de la corrida campeona** `rf_ne300_md12_msl1_sin-norm_sin-esc`:
 las 16 métricas registradas, tags y metadatos de la corrida:
 
 ![Detalle de la corrida campeona](mlflow_screenshots/mlflow_corrida_campeon.png)
 
-**Captura 3 — Artefactos de la corrida campeona** (carpeta `figures/` y
+**Captura 4 — Artefactos de la corrida campeona** (carpeta `figures/` y
 `metrics_table.json` con las métricas por partición, incluida la referencia dummy):
 
 ![Artefactos de la corrida campeona](mlflow_screenshots/mlflow_campeon_artefactos.png)
 
-**Captura 4 — Curva de validación del sweep** `tune_max_depth_xgb` descrito en la
+**Captura 5 — Curva de validación del sweep** `tune_max_depth_xgb` descrito en la
 sección 2 (RMSE train vs val contra `max_depth`; mejor valor = 5):
 
 ![Curva de validación del sweep de max_depth](mlflow_screenshots/mlflow_curva_validacion_sweep.png)
