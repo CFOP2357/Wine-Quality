@@ -1,0 +1,6 @@
+# Entorno para `mlflow run` (si no se usa --env-manager local)
+python: "3.12.10"
+build_dependencies:
+  - pip
+dependencies:
+  - -r requirements.txt

@@ -18,6 +18,7 @@ modeling/models.py (Factory).
 """
 
 import argparse
+import os
 
 import mlflow
 import pandas as pd
@@ -77,8 +78,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--max-depth",
         type=int,
         default=None,
-        help="[tree, rf, xgb] Profundidad máxima de cada árbol "
-        "(sin límite en tree/rf y 6 en xgb si se omite)",
+        help="[tree, rf, xgb] Profundidad máxima de cada árbol; -1 o no pasarlo = "
+        "default de la librería (sin límite en tree/rf, 6 en xgb)",
     )
     parser.add_argument(
         "--min-samples-leaf",
@@ -94,9 +95,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--fit-intercept",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="[linear] Ajustar el término independiente",
+        choices=["true", "false"],
+        default="true",
+        help="[linear] Ajustar el término independiente "
+        "(string para ser compatible con los parámetros planos de MLproject)",
     )
     # --- preprocesamiento (también es parte del experimento) ---
     parser.add_argument(
@@ -129,7 +131,16 @@ def split_features_target(df: pd.DataFrame):
 
 
 def setup_mlflow() -> None:
-    """Tracking local en SQLite con artefactos bajo mlartifacts/ (como en la Act. 2)."""
+    """Configura el tracking según cómo se lanzó el script:
+
+    - `mlflow run`: el proceso padre YA creó la corrida (MLFLOW_RUN_ID en el
+      entorno) con su propio tracking URI/experimento; aquí no se toca nada y
+      start_run() simplemente se adhiere a esa corrida.
+    - Ejecución directa (`python -m ...`): tracking local en SQLite con
+      artefactos bajo mlartifacts/ (como en la Actividad 2).
+    """
+    if os.getenv("MLFLOW_RUN_ID"):
+        return
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     if mlflow.get_experiment_by_name(EXPERIMENT_NAME) is None:
         mlflow.create_experiment(
@@ -142,11 +153,22 @@ def log_to_mlflow(params, sizes, results, fig_path, model, X_train) -> str:
     """Registra la corrida: parámetros, métricas, artefactos y el modelo entrenado."""
     run_name = f"{params['model']}_seed{params['seed']}"
     with mlflow.start_run(run_name=run_name) as run:
+        # El tag funciona también cuando la corrida la creó `mlflow run`
+        # (ahí run_name de start_run se ignora al adherirse a la corrida activa)
         mlflow.set_tags(
-            {"etapa": "experimentacion", "problema": "regression", "autor": "Yoguel Salazar"}
+            {
+                "mlflow.runName": run_name,
+                "etapa": "experimentacion",
+                "problema": "regression",
+                "autor": "Yoguel Salazar",
+            }
         )
-        # Parámetros: configuración efectiva (modelo + preprocesamiento) y datos
-        mlflow.log_params(params | sizes)
+        # Parámetros: configuración efectiva (modelo + preprocesamiento) y datos.
+        # `mlflow run` ya registró los parámetros del MLproject en la corrida
+        # (como strings crudos); MLflow prohíbe cambiarles el valor, así que
+        # solo se agregan las claves nuevas (model_class, n_train, etc.).
+        existing = mlflow.get_run(run.info.run_id).data.params
+        mlflow.log_params({k: v for k, v in (params | sizes).items() if k not in existing})
 
         # Métricas: mae/rmse/r2 por partición (modelo y referencia dummy)
         for col in results.columns:
@@ -181,10 +203,11 @@ def run_experiment(args: argparse.Namespace) -> pd.DataFrame:
     """Flujo completo: datos -> pipeline -> entrenamiento -> evaluación -> registro."""
     hyperparams = {
         "n_estimators": args.n_estimators,
-        "max_depth": args.max_depth,
+        # -1 (sentinela de MLproject) equivale a no pasarlo -> default de la librería
+        "max_depth": None if args.max_depth in (None, -1) else args.max_depth,
         "min_samples_leaf": args.min_samples_leaf,
         "learning_rate": args.learning_rate,
-        "fit_intercept": args.fit_intercept,
+        "fit_intercept": args.fit_intercept == "true",
     }
     params = used_params(args.model, args.seed, **hyperparams)
     params |= {"normalizer": args.normalizer, "scaler": args.scaler}
