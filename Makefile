@@ -57,6 +57,12 @@ create_environment:
 #################################################################################
 
 
+## Genera el PDF de entrega desde reports/Entregable.md
+.PHONY: pdf
+pdf:
+	$(PYTHON_INTERPRETER) reports/make_pdf.py
+
+
 ## Make dataset (carga, limpia y guarda las particiones 70/15/15 en data/processed)
 .PHONY: data
 data: requirements

@@ -211,7 +211,7 @@ o invoca directamente el ejecutable del entorno:
 ```
 ├── MLproject          <- Definición del proyecto MLflow (entry points `main` y `tune`)
 ├── python_env.yaml    <- Entorno que usa `mlflow run` si no se pasa --env-manager local
-├── Makefile           <- Comandos de conveniencia del template CCDS
+├── Makefile           <- Comandos de conveniencia (requirements, data, pdf, lint, format)
 ├── README.md          <- Este archivo
 ├── requirements.txt   <- Dependencias del proyecto
 ├── pyproject.toml     <- Metadatos del paquete `wine_quality`
@@ -221,7 +221,11 @@ o invoca directamente el ejecutable del entorno:
 ├── notebooks          <- Notebook de la Actividad 2 (EDA y modelo base; solo exploración)
 ├── references         <- Material explicativo (investigación de patrones de diseño, etc.)
 ├── reports            <- Salidas generadas
-│   └── figures        <- Figuras de evaluación de cada corrida
+│   ├── Entregable.md          <- Fuente del PDF de entrega
+│   ├── make_pdf.py            <- Genera el PDF de entrega (`make pdf`)
+│   ├── mlflow_screenshots     <- Capturas de la UI de MLflow usadas en el entregable
+│   └── figures                <- Últimas figuras generadas (las de cada corrida viven
+│                                 como artefactos en MLflow)
 │
 └── wine_quality       <- Código fuente del proyecto
     ├── config.py              <- Rutas, constantes y configuración de MLflow
