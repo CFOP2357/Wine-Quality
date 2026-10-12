@@ -11,7 +11,7 @@ así el preprocesamiento se vuelve un hiperparámetro más del experimento
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
+from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -23,6 +23,11 @@ from sklearn.preprocessing import (
 from wine_quality.config import TARGET
 
 # Opciones de cada paso numérico; "none" omite el paso.
+IMPUTERS = {
+    "median": lambda: SimpleImputer(strategy="median"),
+    "mean": lambda: SimpleImputer(strategy="mean"),
+    "knn": lambda: KNNImputer(n_neighbors=5),
+}
 NORMALIZERS = {
     "yeo-johnson": lambda: PowerTransformer(method="yeo-johnson", standardize=False),
     "none": None,
@@ -45,18 +50,19 @@ def feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
 def build_preprocessor(
     num_cols: list[str],
     cat_cols: list[str],
+    imputer: str = "median",
     normalizer: str = "yeo-johnson",
     scaler: str = "standard",
 ) -> ColumnTransformer:
     """Preprocesador configurable (defaults = decisiones documentadas en el EDA):
 
-    - Numéricas: imputación mediana (robusta a la asimetría) -> normalización
-      Yeo-Johnson (corrige colas pesadas sin eliminar outliers) -> estandarización
-      (media 0 / desviación 1). Normalización y escalado pueden cambiarse u
-      omitirse por corrida.
+    - Numéricas: imputación (mediana por default: robusta a la asimetría) ->
+      normalización Yeo-Johnson (corrige colas pesadas sin eliminar outliers) ->
+      estandarización (media 0 / desviación 1). Cada paso puede cambiarse u
+      omitirse por corrida (--imputer, --normalizer, --scaler).
     - Categóricas: imputación moda -> one-hot ('tipo' en columnas binarias).
     """
-    num_steps: list[tuple] = [("imputer", SimpleImputer(strategy="median"))]
+    num_steps: list[tuple] = [("imputer", IMPUTERS[imputer]())]
     if NORMALIZERS[normalizer] is not None:
         num_steps.append(("normalizer", NORMALIZERS[normalizer]()))
     if SCALERS[scaler] is not None:

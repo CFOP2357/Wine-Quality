@@ -12,6 +12,7 @@ entry_points:
       min_samples_leaf: {type: float,  default: 1}        # [tree, rf]
       learning_rate:    {type: float,  default: 0.1}      # [xgb]
       fit_intercept:    {type: string, default: "true"}   # [linear]
+      imputer:          {type: string, default: median}       # median | mean | knn
       normalizer:       {type: string, default: yeo-johnson}  # yeo-johnson | none
       scaler:           {type: string, default: standard}     # standard | minmax | none
     command: >-
@@ -23,5 +24,6 @@ entry_points:
       --min-samples-leaf {min_samples_leaf}
       --learning-rate {learning_rate}
       --fit-intercept {fit_intercept}
+      --imputer {imputer}
       --normalizer {normalizer}
       --scaler {scaler}

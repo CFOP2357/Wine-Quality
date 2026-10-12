@@ -69,6 +69,7 @@ Argumentos disponibles (`--help` muestra esta ayuda):
 | `--min-samples-leaf` | tree, rf | `1` | Mínimo de muestras por hoja |
 | `--learning-rate` | xgb | `0.1` | Tasa de aprendizaje del boosting |
 | `--fit-intercept {true,false}` | linear | `true` | Ajustar término independiente |
+| `--imputer {median,mean,knn}` | preprocesamiento | `median` | Imputación de numéricas |
 | `--normalizer {yeo-johnson,none}` | preprocesamiento | `yeo-johnson` | Normalización de numéricas |
 | `--scaler {standard,minmax,none}` | preprocesamiento | `standard` | Escalado de numéricas |
 
