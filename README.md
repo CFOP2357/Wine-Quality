@@ -40,8 +40,13 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Coloca los datos crudos en `data/raw/` (no se versionan en git):
-`winequality-red.csv` y `winequality-white.csv`, descargados de UCI.
+El último paso instala también el paquete `wine_quality` en modo editable (la
+línea `-e .` de requirements), que es lo que permite ejecutar `python -m
+wine_quality.modeling.train` desde la raíz.
+
+Descarga los datos crudos de [UCI: Wine Quality](https://archive.ics.uci.edu/dataset/186/wine+quality)
+y coloca `winequality-red.csv` y `winequality-white.csv` en `data/raw/`
+(los datos no se versionan en git).
 
 > **Importante:** todos los comandos de este README (`python`, `mlflow run`,
 > `mlflow ui`) deben ejecutarse **con el entorno `.venv` activado**. Si tienes otro
@@ -65,7 +70,7 @@ Argumentos disponibles (`--help` muestra esta ayuda):
 | `--model {linear,tree,rf,xgb}` | — | `linear` | Modelo a entrenar |
 | `--seed` | todos | `42` | Semilla: controla la partición y el modelo |
 | `--n-estimators` | rf, xgb | `200` | Número de árboles del ensamble |
-| `--max-depth` | tree, rf, xgb | `-1` | Profundidad máxima (`-1` = default de la librería) |
+| `--max-depth` | tree, rf, xgb | omitido | Profundidad máxima; omitido o `-1` = default de la librería (sin límite en tree/rf, 6 en xgb) |
 | `--min-samples-leaf` | tree, rf | `1` | Mínimo de muestras por hoja |
 | `--learning-rate` | xgb | `0.1` | Tasa de aprendizaje del boosting |
 | `--fit-intercept {true,false}` | linear | `true` | Ajustar término independiente |
@@ -73,7 +78,7 @@ Argumentos disponibles (`--help` muestra esta ayuda):
 | `--normalizer {yeo-johnson,none}` | preprocesamiento | `yeo-johnson` | Normalización de numéricas |
 | `--scaler {standard,minmax,none}` | preprocesamiento | `standard` | Escalado de numéricas |
 | `--overfit-threshold` | diagnóstico | `3.0` | % de brecha RMSE val vs train para etiquetar `is_overfitting` |
-| `--early-stopping` | xgb | `-1` (off) | Rondas sin mejora en val para detener el boosting y quedarse con la mejor iteración; genera la curva train-vs-val por iteración |
+| `--early-stopping` | xgb | omitido (off) | Rondas sin mejora en val para detener el boosting y quedarse con la mejor iteración (usa `--n-estimators` alto, p. ej. 1000); genera la curva train-vs-val por iteración. `-1` también lo desactiva |
 
 Los hiperparámetros que no aplican al modelo elegido se ignoran (y no se registran),
 así la tabla comparativa de MLflow queda limpia.
@@ -81,7 +86,7 @@ así la tabla comparativa de MLflow queda limpia.
 ### Opción 2: `mlflow run` (MLproject)
 
 ```powershell
-$env:MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"
+$env:MLFLOW_TRACKING_URI = "sqlite:///mlflow.db"   # Linux/macOS: export MLFLOW_TRACKING_URI=sqlite:///mlflow.db
 mlflow run . --env-manager local --experiment-name TC5061_Actividad3_Experimentacion `
     -P model=rf -P n_estimators=300 -P max_depth=12
 ```
@@ -107,16 +112,26 @@ la **curva de validación** (RMSE train vs val contra el hiperparámetro) como
 artefacto del padre. Buscables: `n_estimators`, `max_depth`, `min_samples_leaf`,
 `learning_rate`, `imputer`, `normalizer`, `scaler`.
 
-### Corridas de ejemplo (experimento comparativo)
+### Corridas del experimento comparativo
+
+Estos son los comandos exactos de las 7 corridas base del experimento
+**TC5061_Actividad3_Experimentacion** (misma semilla 42 para que solo cambie lo
+indicado):
 
 ```powershell
-python -m wine_quality.modeling.train                                            # 1. baseline lineal
-python -m wine_quality.modeling.train --model tree --max-depth 8                 # 2. árbol
-python -m wine_quality.modeling.train --model rf   --n-estimators 100            # 3. bosque chico
-python -m wine_quality.modeling.train --model rf   --n-estimators 300 --max-depth 12   # 4. bosque grande
-python -m wine_quality.modeling.train --model xgb  --n-estimators 150 --learning-rate 0.08  # 5. boosting
-python -m wine_quality.modeling.train --model xgb  --n-estimators 300 --learning-rate 0.05  # 6. boosting fino
+python -m wine_quality.modeling.train                                                        # 1. baseline lineal
+python -m wine_quality.modeling.train --model tree --max-depth 6 --min-samples-leaf 5        # 2. árbol
+python -m wine_quality.modeling.train --model rf   --n-estimators 200                        # 3. bosque, defaults
+python -m wine_quality.modeling.train --model rf   --n-estimators 400 --max-depth 12 --min-samples-leaf 2   # 4. bosque grande
+python -m wine_quality.modeling.train --model rf   --n-estimators 300 --max-depth 12 --normalizer none --scaler none  # 5. bosque sin preprocesamiento
+python -m wine_quality.modeling.train --model xgb  --n-estimators 300 --learning-rate 0.05 --max-depth 4    # 6. boosting
+python -m wine_quality.modeling.train --model xgb  --n-estimators 500 --learning-rate 0.03 --max-depth 6    # 7. boosting profundo
 ```
+
+Sobre esa base, la búsqueda de hiperparámetros de xgb se hizo con corridas
+adicionales de early stopping (p. ej. `--model xgb --n-estimators 1000
+--learning-rate 0.05 --max-depth 5 --early-stopping 50`, la mejor) y con el
+sweep de `max_depth` de la sección anterior.
 
 ## Ver y comparar los experimentos
 
@@ -129,9 +144,21 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 
 Abre <http://127.0.0.1:5000>, entra al experimento
 **TC5061_Actividad3_Experimentacion**, selecciona corridas y usa **Compare** para
-contrastar hiperparámetros contra métricas (`val_rmse`, `val_mae`, `val_r2`...).
-Cada corrida incluye además la figura `figures/evaluation_test.png`, la tabla
-`metrics_table.json` y el pipeline entrenado como artefactos.
+contrastar hiperparámetros contra métricas (`val_rmse`, `val_mae`, `val_r2`,
+`overfit_gap_pct`...). Las corridas de un sweep aparecen anidadas bajo su corrida
+padre `tune_<param>` (flecha para expandir). Cada corrida incluye como artefactos
+la figura `figures/evaluation_test.png`, la tabla `metrics_table.json`, el
+pipeline entrenado y, cuando aplica, las curvas de iteraciones/validación.
+
+### Inferencia con un modelo registrado
+
+```powershell
+python -m wine_quality.modeling.predict                        # usa el campeón por val_rmse
+python -m wine_quality.modeling.predict --run-id <id> --input data/processed/test.csv --output data/processed/predictions.csv
+```
+
+Carga el pipeline completo de la corrida indicada (o de la mejor por `val_rmse`
+si se omite `--run-id`) y agrega la columna `prediction` al CSV de entrada.
 
 ## Reproducibilidad
 
