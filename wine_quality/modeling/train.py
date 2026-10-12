@@ -52,7 +52,7 @@ from wine_quality.features import (
     feature_columns,
 )
 from wine_quality.modeling.models import REGISTRY, build_model, used_params
-from wine_quality.plots import evaluation_plot
+from wine_quality.plots import evaluation_plot, iteration_curve
 
 
 # ====================== CONFIGURACIÓN ======================
@@ -75,6 +75,8 @@ class ExperimentConfig:
     imputer: str = "median"
     normalizer: str = "yeo-johnson"
     scaler: str = "standard"
+    overfit_threshold: float = 3.0
+    early_stopping: int | None = None
 
     @classmethod
     def from_cli(cls, argv: list[str] | None = None) -> "ExperimentConfig":
@@ -91,6 +93,9 @@ class ExperimentConfig:
             imputer=args.imputer,
             normalizer=args.normalizer,
             scaler=args.scaler,
+            overfit_threshold=args.overfit_threshold,
+            # -1 (sentinela de MLproject) = sin early stopping
+            early_stopping=None if args.early_stopping in (None, -1) else args.early_stopping,
         )
 
     @staticmethod
@@ -169,6 +174,21 @@ class ExperimentConfig:
             default="standard",
             help="Escalado de variables numéricas ('none' lo omite)",
         )
+        parser.add_argument(
+            "--overfit-threshold",
+            type=float,
+            default=3.0,
+            help="Umbral (%%) de brecha RMSE val-vs-train para marcar la corrida "
+            "como overfitting (diagnóstico: etiqueta y advierte, no descarta)",
+        )
+        parser.add_argument(
+            "--early-stopping",
+            type=int,
+            default=None,
+            help="[xgb] Rondas sin mejora en val para detener el boosting; XGBoost "
+            "se queda con la mejor iteración (pon --n-estimators alto, p. ej. 1000). "
+            "Genera la curva train-vs-val por iteración como artefacto. -1 = desactivado",
+        )
         return parser
 
     @property
@@ -191,11 +211,44 @@ class ExperimentConfig:
             "normalizer": self.normalizer,
             "scaler": self.scaler,
         }
+        if self.early_stopping is not None:
+            params["early_stopping"] = self.early_stopping
         return params
 
     @property
     def run_name(self) -> str:
-        return f"{self.model}_seed{self.seed}"
+        """Nombre autodescriptivo de la corrida: modelo + hiperparámetros que
+        ese modelo consume + desviaciones de preprocesamiento respecto al
+        default del EDA. Así la vista de corridas de MLflow dice por sí sola
+        qué cambió en cada una (la semilla ya está como parámetro).
+
+        Ejemplos: 'rf_ne300_md12_msl1_sin-norm_sin-esc', 'xgb_ne300_md4_lr0.05'.
+        """
+        abbrev = {
+            "n_estimators": "ne",
+            "max_depth": "md",
+            "min_samples_leaf": "msl",
+            "learning_rate": "lr",
+        }
+        parts = [self.model]
+        _, keys, _ = REGISTRY[self.model]
+        for key in keys:
+            value = self.hyperparams[key]
+            if key == "fit_intercept":
+                parts.append(f"intercepto-{'si' if value else 'no'}")
+            elif key == "max_depth" and value is None:
+                parts.append("md-auto")
+            else:
+                parts.append(f"{abbrev[key]}{value}")
+        if self.imputer != "median":
+            parts.append(f"imp-{self.imputer}")
+        if self.normalizer != "yeo-johnson":
+            parts.append("sin-norm" if self.normalizer == "none" else f"norm-{self.normalizer}")
+        if self.scaler != "standard":
+            parts.append("sin-esc" if self.scaler == "none" else f"esc-{self.scaler}")
+        if self.early_stopping is not None:
+            parts.append(f"es{self.early_stopping}")
+        return "_".join(parts)
 
 
 # ======================= ENTRENAMIENTO =======================
@@ -203,10 +256,18 @@ class ExperimentConfig:
 
 class Trainer:
     """Construye el pipeline ÚNICO (preprocesamiento + modelo) a partir de la
-    configuración y lo ajusta SOLO con la partición de entrenamiento."""
+    configuración y lo ajusta SOLO con la partición de entrenamiento.
+
+    Con --early-stopping (solo xgb) también usa val como eval_set: XGBoost
+    evalúa train y val en cada ronda de boosting, se detiene cuando val deja
+    de mejorar y conserva la mejor iteración. Eso es *seleccionar* con val
+    (legítimo); test no participa. Las curvas quedan en `evals_result_` y la
+    mejor ronda en `best_iteration_`."""
 
     def __init__(self, config: ExperimentConfig):
         self.config = config
+        self.evals_result_: dict | None = None
+        self.best_iteration_: int | None = None
 
     def build_pipeline(self, num_cols: list[str], cat_cols: list[str]) -> Pipeline:
         return Pipeline(
@@ -225,11 +286,42 @@ class Trainer:
             ]
         )
 
-    def train(self, df_train: pd.DataFrame) -> Pipeline:
+    def train(self, df_train: pd.DataFrame, df_val: pd.DataFrame | None = None) -> Pipeline:
         num_cols, cat_cols = feature_columns(df_train)
         pipeline = self.build_pipeline(num_cols, cat_cols)
         X_train, y_train = split_features_target(df_train)
-        pipeline.fit(X_train, y_train)
+
+        use_early_stopping = (
+            self.config.early_stopping is not None and self.config.model == "xgb"
+        )
+        if not use_early_stopping:
+            if self.config.early_stopping is not None:
+                logger.warning(
+                    f"--early-stopping solo aplica a xgb; se ignora para {self.config.model}"
+                )
+            pipeline.fit(X_train, y_train)
+            return pipeline
+
+        # Early stopping: el preprocesador se ajusta SOLO con train y val se
+        # transforma con él (sin fuga); el modelo recibe ambas como eval_set.
+        assert df_val is not None, "early stopping requiere la partición de validación"
+        preprocessor = pipeline.named_steps["preprocessor"]
+        model = pipeline.named_steps["model"]
+        X_val, y_val = split_features_target(df_val)
+        Xt_train = preprocessor.fit_transform(X_train, y_train)
+        Xt_val = preprocessor.transform(X_val)
+
+        model.set_params(early_stopping_rounds=self.config.early_stopping, eval_metric="rmse")
+        model.fit(Xt_train, y_train, eval_set=[(Xt_train, y_train), (Xt_val, y_val)], verbose=False)
+
+        self.evals_result_ = model.evals_result()
+        self.best_iteration_ = int(model.best_iteration)
+        logger.info(
+            f"Early stopping: mejor iteración = {self.best_iteration_} "
+            f"de un máximo de {self.config.n_estimators}"
+        )
+        # El pipeline queda con ambos pasos ya ajustados: predict funciona igual
+        # que sin early stopping (y usa la mejor iteración automáticamente).
         return pipeline
 
 
@@ -269,6 +361,15 @@ class Evaluator:
             columns[f"dummy_{name}"] = self.evaluate(dummy, X, y)
         return pd.DataFrame(columns).round(4)
 
+    @staticmethod
+    def overfit_gap_pct(results: pd.DataFrame) -> float:
+        """Brecha relativa (%) del RMSE val respecto a train: diagnóstico de
+        overfitting. Nota: los ensambles de árboles casi memorizan train por
+        diseño, así que una brecha grande solo es dañina si además empeora val."""
+        train_rmse = results.loc["rmse", "train"]
+        val_rmse = results.loc["rmse", "val"]
+        return float((val_rmse - train_rmse) / train_rmse * 100)
+
 
 # ========================== TRACKING ==========================
 
@@ -300,10 +401,12 @@ class MLflowTracker:
         config: ExperimentConfig,
         sizes: dict,
         results: pd.DataFrame,
-        fig_path: Path,
+        fig_paths: list[Path],
         model: Pipeline,
         X_train: pd.DataFrame,
+        overfit_gap: float,
     ) -> str:
+        is_overfit = overfit_gap > config.overfit_threshold
         with mlflow.start_run(run_name=config.run_name) as run:
             # El tag funciona también cuando la corrida la creó `mlflow run`
             # (ahí run_name de start_run se ignora al adherirse a la corrida activa)
@@ -313,6 +416,7 @@ class MLflowTracker:
                     "etapa": "experimentacion",
                     "problema": "regression",
                     "autor": "Yoguel Salazar",
+                    "is_overfitting": "si" if is_overfit else "no",
                 }
             )
             # Parámetros: configuración efectiva (modelo + preprocesamiento) y datos.
@@ -325,11 +429,15 @@ class MLflowTracker:
             )
 
             # Métricas: mae/rmse/r2 por partición (modelo y referencia dummy)
+            # + brecha de overfitting (RMSE val vs train, en %)
             for col in results.columns:
                 mlflow.log_metrics({f"{col}_{k}": float(v) for k, v in results[col].items()})
+            mlflow.log_metric("overfit_gap_pct", round(overfit_gap, 1))
 
-            # Artefactos: figura de evaluación y tabla de métricas
-            mlflow.log_artifact(str(fig_path), artifact_path="figures")
+            # Artefactos: figuras (evaluación y, con early stopping, la curva
+            # train-vs-val por iteración) y tabla de métricas
+            for fig in fig_paths:
+                mlflow.log_artifact(str(fig), artifact_path="figures")
             mlflow.log_table(results.reset_index(names="metric"), artifact_file="metrics_table.json")
 
             # Modelo entrenado (pipeline completo) con firma de entrada/salida
@@ -374,26 +482,44 @@ def run_experiment(config: ExperimentConfig) -> pd.DataFrame:
     }
 
     # 2. Entrenamiento: pipeline único ajustado SOLO con train
-    model = Trainer(config).train(df_train)
+    # (con --early-stopping, val actúa como eval_set para elegir la iteración)
+    trainer = Trainer(config)
+    model = trainer.train(df_train, df_val)
+    if trainer.best_iteration_ is not None:
+        sizes["best_iteration"] = trainer.best_iteration_
 
     # 3. Métricas por partición (modelo y dummy)
     evaluator = Evaluator(df_train, df_val, df_test)
     results = evaluator.results_table(model)
     logger.info(f"Métricas:\n{results}")
 
-    # 4. Figura de diagnóstico sobre test
-    X_test, y_test = evaluator.partitions["test"]
-    fig_path = evaluation_plot(y_test, model.predict(X_test), partition="test")
+    # 4. Diagnóstico de overfitting: brecha relativa RMSE val vs train
+    overfit_gap = Evaluator.overfit_gap_pct(results)
+    if overfit_gap > config.overfit_threshold:
+        logger.warning(
+            f"Posible overfitting: RMSE val {overfit_gap:.1f}% peor que train "
+            f"(umbral {config.overfit_threshold}%). La corrida queda etiquetada "
+            "'is_overfitting=si'; contrasta con val_rmse antes de descartarla."
+        )
 
-    # 5. Registro de la corrida en MLflow
+    # 5. Figuras: diagnóstico sobre test y, con early stopping, la curva
+    # train-vs-val por iteración
+    X_test, y_test = evaluator.partitions["test"]
+    fig_paths = [evaluation_plot(y_test, model.predict(X_test), partition="test")]
+    if trainer.evals_result_ is not None:
+        fig_paths.append(iteration_curve(trainer.evals_result_, trainer.best_iteration_))
+
+    # 6. Registro de la corrida en MLflow
     tracker = MLflowTracker()
     tracker.setup()
     X_train, _ = evaluator.partitions["train"]
-    tracker.log_run(config, sizes, results, fig_path, model, X_train)
+    tracker.log_run(config, sizes, results, fig_paths, model, X_train, overfit_gap)
 
     logger.success(
         f"Entrenamiento completo | modelo={config.model} | "
-        f"val_rmse={results.loc['rmse', 'val']:.4f} | val_mae={results.loc['mae', 'val']:.4f}"
+        f"val_rmse={results.loc['rmse', 'val']:.4f} | val_mae={results.loc['mae', 'val']:.4f} | "
+        f"overfit_gap={overfit_gap:.1f}% | "
+        f"is_overfitting={'si' if overfit_gap > config.overfit_threshold else 'no'}"
     )
     return results
 

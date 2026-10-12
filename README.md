@@ -72,6 +72,7 @@ Argumentos disponibles (`--help` muestra esta ayuda):
 | `--imputer {median,mean,knn}` | preprocesamiento | `median` | Imputación de numéricas |
 | `--normalizer {yeo-johnson,none}` | preprocesamiento | `yeo-johnson` | Normalización de numéricas |
 | `--scaler {standard,minmax,none}` | preprocesamiento | `standard` | Escalado de numéricas |
+| `--overfit-threshold` | diagnóstico | `3.0` | % de brecha RMSE val vs train para etiquetar `is_overfitting` |
 
 Los hiperparámetros que no aplican al modelo elegido se ignoran (y no se registran),
 así la tabla comparativa de MLflow queda limpia.

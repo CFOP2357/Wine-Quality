@@ -15,6 +15,8 @@ entry_points:
       imputer:          {type: string, default: median}       # median | mean | knn
       normalizer:       {type: string, default: yeo-johnson}  # yeo-johnson | none
       scaler:           {type: string, default: standard}     # standard | minmax | none
+      overfit_threshold: {type: float, default: 3.0}          # % brecha RMSE val vs train
+      early_stopping:   {type: float, default: -1}            # [xgb] rondas sin mejora; -1 = off
     command: >-
       python -m wine_quality.modeling.train
       --model {model}
@@ -27,3 +29,5 @@ entry_points:
       --imputer {imputer}
       --normalizer {normalizer}
       --scaler {scaler}
+      --overfit-threshold {overfit_threshold}
+      --early-stopping {early_stopping}
