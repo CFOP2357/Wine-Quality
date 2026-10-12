@@ -225,3 +225,8 @@ o invoca directamente el ejecutable del entorno:
 Anthropic. (2026). *Claude Code (basado en Claude Opus 5.5 y Claude Fable 5)* [Modelo de
 lenguaje grande], utilizado para edición de código y gestión del repositorio.
 https://claude.com/claude-code
+
+El proyecto se realizó mediante un esquema **human-in-the-loop**: cada decisión de
+diseño (estructura del proyecto, patrones utilizados, modelos e hiperparámetros a
+explorar, criterios de selección y validación) fue dirigida, revisada y aprobada por
+el autor, iterando sobre las propuestas y el código generados con la herramienta.
