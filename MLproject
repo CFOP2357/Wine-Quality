@@ -31,3 +31,39 @@ entry_points:
       --scaler {scaler}
       --overfit-threshold {overfit_threshold}
       --early-stopping {early_stopping}
+
+  # Sweep de UNA coordenada: "sobre tune_param busca el mejor valor (values),
+  # los demás parámetros quedan fijos". Selección por val_rmse; genera la
+  # curva de validación y corridas hijas anidadas por valor.
+  tune:
+    parameters:
+      tune_param:       {type: string}                     # hiperparámetro a buscar
+      values:           {type: string}                     # p. ej. "3,4,5,6,7"
+      model:            {type: string, default: xgb}
+      seed:             {type: float,  default: 42}
+      n_estimators:     {type: float,  default: 200}
+      max_depth:        {type: float,  default: -1}
+      min_samples_leaf: {type: float,  default: 1}
+      learning_rate:    {type: float,  default: 0.1}
+      fit_intercept:    {type: string, default: "true"}
+      imputer:          {type: string, default: median}
+      normalizer:       {type: string, default: yeo-johnson}
+      scaler:           {type: string, default: standard}
+      overfit_threshold: {type: float, default: 3.0}
+      early_stopping:   {type: float, default: -1}
+    command: >-
+      python -m wine_quality.modeling.tune
+      --tune-param {tune_param}
+      --values {values}
+      --model {model}
+      --seed {seed}
+      --n-estimators {n_estimators}
+      --max-depth {max_depth}
+      --min-samples-leaf {min_samples_leaf}
+      --learning-rate {learning_rate}
+      --fit-intercept {fit_intercept}
+      --imputer {imputer}
+      --normalizer {normalizer}
+      --scaler {scaler}
+      --overfit-threshold {overfit_threshold}
+      --early-stopping {early_stopping}

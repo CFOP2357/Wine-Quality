@@ -5,8 +5,8 @@ responsabilidad y todo lo que depende de estadísticas (imputación,
 normalización, escalado) vive en el pipeline del modelo, NO aquí.
 """
 
-import pandas as pd
 from loguru import logger
+import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from wine_quality.config import (
@@ -67,9 +67,7 @@ def split(df: pd.DataFrame, seed: int = DEFAULT_SEED):
         random_state=seed,
         stratify=df_temp[TARGET].clip(lower=4, upper=8),
     )
-    df_train, df_val, df_test = (
-        d.reset_index(drop=True) for d in (df_train, df_val, df_test)
-    )
+    df_train, df_val, df_test = (d.reset_index(drop=True) for d in (df_train, df_val, df_test))
     logger.info(
         f"Train: {df_train.shape} ({len(df_train) / len(df):.0%}) | "
         f"Val: {df_val.shape} ({len(df_val) / len(df):.0%}) | "

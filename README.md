@@ -73,6 +73,7 @@ Argumentos disponibles (`--help` muestra esta ayuda):
 | `--normalizer {yeo-johnson,none}` | preprocesamiento | `yeo-johnson` | Normalización de numéricas |
 | `--scaler {standard,minmax,none}` | preprocesamiento | `standard` | Escalado de numéricas |
 | `--overfit-threshold` | diagnóstico | `3.0` | % de brecha RMSE val vs train para etiquetar `is_overfitting` |
+| `--early-stopping` | xgb | `-1` (off) | Rondas sin mejora en val para detener el boosting y quedarse con la mejor iteración; genera la curva train-vs-val por iteración |
 
 Los hiperparámetros que no aplican al modelo elegido se ignoran (y no se registran),
 así la tabla comparativa de MLflow queda limpia.
@@ -87,6 +88,24 @@ mlflow run . --env-manager local --experiment-name TC5061_Actividad3_Experimenta
 
 `--env-manager local` reutiliza el entorno activo (`.venv`); sin esa bandera, MLflow
 construye un entorno nuevo a partir de [`python_env.yaml`](python_env.yaml).
+
+### Búsqueda del mejor valor de un hiperparámetro (sweep)
+
+Para buscar el mejor valor de **un** hiperparámetro manteniendo los demás fijos
+("sobre este busca, estos déjalos fijos"):
+
+```powershell
+python -m wine_quality.modeling.tune --tune-param max_depth --values 3,4,5,6,7 `
+    --model xgb --n-estimators 1000 --learning-rate 0.05 --early-stopping 50
+```
+
+o con MLproject: `mlflow run . -e tune --env-manager local -P tune_param=max_depth -P values=3,4,5,6,7 -P model=xgb ...`
+
+Entrena una corrida completa por valor (hijas anidadas bajo una corrida padre
+`tune_<param>`), selecciona el mejor por `val_rmse` (test no participa) y sube
+la **curva de validación** (RMSE train vs val contra el hiperparámetro) como
+artefacto del padre. Buscables: `n_estimators`, `max_depth`, `min_samples_leaf`,
+`learning_rate`, `imputer`, `normalizer`, `scaler`.
 
 ### Corridas de ejemplo (experimento comparativo)
 
@@ -119,7 +138,7 @@ Cada corrida incluye además la figura `figures/evaluation_test.png`, la tabla
 - **Semilla:** `--seed` controla la partición estratificada y la aleatoriedad del
   modelo; se registra como parámetro en cada corrida. Misma configuración + misma
   semilla ⇒ mismos resultados.
-- **Dependencias:** declaradas en [`requirements.txt`](requirements.txt).
+- **Dependencias:** declaradas con versiones fijadas en [`requirements.txt`](requirements.txt).
 - **Datos inmutables:** `data/raw/` nunca se modifica; las particiones generadas se
   guardan en `data/processed/` y todo lo aprendido (imputación, normalización,
   escalado) vive dentro del pipeline, ajustado únicamente con train.
@@ -148,7 +167,7 @@ o invoca directamente el ejecutable del entorno:
 ## Organización del proyecto
 
 ```
-├── MLproject          <- Definición del proyecto MLflow (entry point `main` parametrizado)
+├── MLproject          <- Definición del proyecto MLflow (entry points `main` y `tune`)
 ├── python_env.yaml    <- Entorno que usa `mlflow run` si no se pasa --env-manager local
 ├── Makefile           <- Comandos de conveniencia del template CCDS
 ├── README.md          <- Este archivo
@@ -166,11 +185,12 @@ o invoca directamente el ejecutable del entorno:
     ├── config.py              <- Rutas, constantes y configuración de MLflow
     ├── dataset.py             <- Carga, limpieza y partición 70/15/15 estratificada
     ├── features.py            <- Preprocesador configurable (imputación/normalización/escalado/one-hot)
-    ├── plots.py               <- Figura de evaluación (real vs predicho + residuales)
+    ├── plots.py               <- Figuras: evaluación, curva de iteraciones y curva de validación
     └── modeling
         ├── models.py          <- Registro factory de modelos y sus hiperparámetros
         ├── train.py           <- Script de entrenamiento parametrizado + MLflow Tracking
-        └── predict.py         <- (pendiente) inferencia batch con un modelo registrado
+        ├── tune.py            <- Sweep de un hiperparámetro (corridas anidadas + curva de validación)
+        └── predict.py         <- Inferencia batch con un modelo registrado en MLflow
 ```
 
 ## Declaración de uso de inteligencia artificial

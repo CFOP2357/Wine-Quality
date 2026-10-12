@@ -35,7 +35,7 @@ TEST_SIZE = 0.15
 # Semilla por defecto (sobreescribible con --seed en el script de entrenamiento)
 DEFAULT_SEED = 42
 
-# MLflow (se usa en el paso de instrumentación)
+# MLflow (tracking local; lo consumen modeling/train.py y modeling/tune.py)
 EXPERIMENT_NAME = "TC5061_Actividad3_Experimentacion"
 MLFLOW_TRACKING_URI = f"sqlite:///{(PROJ_ROOT / 'mlflow.db').as_posix()}"
 

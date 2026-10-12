@@ -24,14 +24,14 @@ selección de modelo en modeling/models.py (Factory).
 """
 
 import argparse
-import os
 from dataclasses import dataclass
+import os
 from pathlib import Path
 
-import mlflow
-import pandas as pd
 from loguru import logger
+import mlflow
 from mlflow.models import infer_signature
+import pandas as pd
 from sklearn import metrics
 from sklearn.dummy import DummyRegressor
 from sklearn.pipeline import Pipeline
@@ -53,7 +53,6 @@ from wine_quality.features import (
 )
 from wine_quality.modeling.models import REGISTRY, build_model, used_params
 from wine_quality.plots import evaluation_plot, iteration_curve
-
 
 # ====================== CONFIGURACIÓN ======================
 
@@ -80,7 +79,12 @@ class ExperimentConfig:
 
     @classmethod
     def from_cli(cls, argv: list[str] | None = None) -> "ExperimentConfig":
-        args = cls._parser().parse_args(argv)
+        return cls.from_namespace(cls._parser().parse_args(argv))
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> "ExperimentConfig":
+        """Construye la configuración desde un namespace ya parseado (lo usa
+        también tune.py, cuyo parser extiende el de este módulo)."""
         return cls(
             model=args.model,
             seed=args.seed,
@@ -282,7 +286,10 @@ class Trainer:
                         scaler=self.config.scaler,
                     ),
                 ),
-                ("model", build_model(self.config.model, self.config.seed, **self.config.hyperparams)),
+                (
+                    "model",
+                    build_model(self.config.model, self.config.seed, **self.config.hyperparams),
+                ),
             ]
         )
 
@@ -291,9 +298,7 @@ class Trainer:
         pipeline = self.build_pipeline(num_cols, cat_cols)
         X_train, y_train = split_features_target(df_train)
 
-        use_early_stopping = (
-            self.config.early_stopping is not None and self.config.model == "xgb"
-        )
+        use_early_stopping = self.config.early_stopping is not None and self.config.model == "xgb"
         if not use_early_stopping:
             if self.config.early_stopping is not None:
                 logger.warning(
@@ -312,7 +317,9 @@ class Trainer:
         Xt_val = preprocessor.transform(X_val)
 
         model.set_params(early_stopping_rounds=self.config.early_stopping, eval_metric="rmse")
-        model.fit(Xt_train, y_train, eval_set=[(Xt_train, y_train), (Xt_val, y_val)], verbose=False)
+        model.fit(
+            Xt_train, y_train, eval_set=[(Xt_train, y_train), (Xt_val, y_val)], verbose=False
+        )
 
         self.evals_result_ = model.evals_result()
         self.best_iteration_ = int(model.best_iteration)
@@ -353,9 +360,7 @@ class Evaluator:
     def results_table(self, model: Pipeline) -> pd.DataFrame:
         X_train, y_train = self.partitions["train"]
         dummy = DummyRegressor(strategy="mean").fit(X_train, y_train)
-        columns = {
-            name: self.evaluate(model, X, y) for name, (X, y) in self.partitions.items()
-        }
+        columns = {name: self.evaluate(model, X, y) for name, (X, y) in self.partitions.items()}
         for name in ("val", "test"):
             X, y = self.partitions[name]
             columns[f"dummy_{name}"] = self.evaluate(dummy, X, y)
@@ -399,15 +404,16 @@ class MLflowTracker:
     def log_run(
         self,
         config: ExperimentConfig,
-        sizes: dict,
+        data_params: dict,
         results: pd.DataFrame,
         fig_paths: list[Path],
         model: Pipeline,
         X_train: pd.DataFrame,
         overfit_gap: float,
+        nested: bool = False,
     ) -> str:
         is_overfit = overfit_gap > config.overfit_threshold
-        with mlflow.start_run(run_name=config.run_name) as run:
+        with mlflow.start_run(run_name=config.run_name, nested=nested) as run:
             # El tag funciona también cuando la corrida la creó `mlflow run`
             # (ahí run_name de start_run se ignora al adherirse a la corrida activa)
             mlflow.set_tags(
@@ -425,7 +431,11 @@ class MLflowTracker:
             # solo se agregan las claves nuevas (model_class, n_train, etc.).
             existing = mlflow.get_run(run.info.run_id).data.params
             mlflow.log_params(
-                {k: v for k, v in (config.effective_params | sizes).items() if k not in existing}
+                {
+                    k: v
+                    for k, v in (config.effective_params | data_params).items()
+                    if k not in existing
+                }
             )
 
             # Métricas: mae/rmse/r2 por partición (modelo y referencia dummy)
@@ -438,7 +448,9 @@ class MLflowTracker:
             # train-vs-val por iteración) y tabla de métricas
             for fig in fig_paths:
                 mlflow.log_artifact(str(fig), artifact_path="figures")
-            mlflow.log_table(results.reset_index(names="metric"), artifact_file="metrics_table.json")
+            mlflow.log_table(
+                results.reset_index(names="metric"), artifact_file="metrics_table.json"
+            )
 
             # Modelo entrenado (pipeline completo) con firma de entrada/salida
             # (formato skops: deserialización segura; se declaran confiables los
@@ -468,13 +480,14 @@ def split_features_target(df: pd.DataFrame):
     return df.drop(columns=[TARGET]), df[TARGET]
 
 
-def run_experiment(config: ExperimentConfig) -> pd.DataFrame:
+def run_experiment(config: ExperimentConfig, nested: bool = False) -> pd.DataFrame:
     """Orquesta el flujo: datos -> Trainer -> Evaluator -> figura -> tracking."""
     logger.info(f"Configuración efectiva: {config.effective_params}")
 
     # 1. Datos: carga -> limpieza -> partición 70/15/15 estratificada (con la semilla)
     df_train, df_val, df_test = dataset.prepare(seed=config.seed)
-    sizes = {
+    # Parámetros descriptivos de los datos (y del entrenamiento, más abajo)
+    data_params = {
         "n_train": len(df_train),
         "n_val": len(df_val),
         "n_test": len(df_test),
@@ -486,7 +499,7 @@ def run_experiment(config: ExperimentConfig) -> pd.DataFrame:
     trainer = Trainer(config)
     model = trainer.train(df_train, df_val)
     if trainer.best_iteration_ is not None:
-        sizes["best_iteration"] = trainer.best_iteration_
+        data_params["best_iteration"] = trainer.best_iteration_
 
     # 3. Métricas por partición (modelo y dummy)
     evaluator = Evaluator(df_train, df_val, df_test)
@@ -513,7 +526,9 @@ def run_experiment(config: ExperimentConfig) -> pd.DataFrame:
     tracker = MLflowTracker()
     tracker.setup()
     X_train, _ = evaluator.partitions["train"]
-    tracker.log_run(config, sizes, results, fig_paths, model, X_train, overfit_gap)
+    tracker.log_run(
+        config, data_params, results, fig_paths, model, X_train, overfit_gap, nested=nested
+    )
 
     logger.success(
         f"Entrenamiento completo | modelo={config.model} | "

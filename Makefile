@@ -3,7 +3,7 @@
 #################################################################################
 
 PROJECT_NAME = Wine-Quality
-PYTHON_VERSION = 3.10
+PYTHON_VERSION = 3.12
 PYTHON_INTERPRETER = python
 
 #################################################################################
@@ -57,10 +57,10 @@ create_environment:
 #################################################################################
 
 
-## Make dataset
+## Make dataset (carga, limpia y guarda las particiones 70/15/15 en data/processed)
 .PHONY: data
 data: requirements
-	$(PYTHON_INTERPRETER) wine_quality/dataset.py
+	$(PYTHON_INTERPRETER) -c "from wine_quality.dataset import prepare; prepare()"
 
 
 #################################################################################

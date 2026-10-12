@@ -47,7 +47,7 @@ def used_params(name: str, seed: int, **hyperparams) -> dict:
     Solo incluye los hiperparámetros que el modelo consume, para que la tabla
     comparativa (p. ej. en MLflow) no muestre columnas irrelevantes.
     """
-    cls, keys, takes_seed = REGISTRY[name]
+    cls, keys, _ = REGISTRY[name]
     params = {"model": name, "model_class": cls.__name__, "seed": seed}
     params.update({k: hyperparams.get(k) for k in keys})
     return params
