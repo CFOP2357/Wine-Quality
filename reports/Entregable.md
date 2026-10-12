@@ -122,8 +122,9 @@ indica que aun así generaliza mejor que las alternativas de baja capacidad (el 
 modelo con brecha <3%, rinde peor en test: ~0.74). **Lo ideal sería iterar con el sweep
 (`tune`) sobre cada hiperparámetro de capacidad** (`max_depth`, `min_samples_leaf`,
 `n_estimators`, y en xgb regularización) **hasta una configuración con brecha train-val
-menor al 3% sin sacrificar validación**: un modelo que rinda igual sin memorizar es
-preferible por robustez ante cambios en la distribución de los datos.
+menor al 3%**, incluso si eso implica un desempeño de validación algo peor: evitar el
+sobreajuste es prioritario, porque un modelo que no memoriza es más robusto ante cambios
+en la distribución de los datos.
 
 **Limitaciones.** La principal es la **selección de hiperparámetros**: la búsqueda fue por
 coordenadas (un hiperparámetro a la vez), que puede perder interacciones entre ellos, y
