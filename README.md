@@ -59,3 +59,7 @@ Wine Quality experimentation with MLflow
 
 --------
 
+
+## Declaración de uso de inteligencia artificial
+
+Anthropic. (2026). *Claude Code (basado en Claude Opus 5.5)* [Modelo de lenguaje grande], utilizado para edición de código y gestión del repositorio. https://claude.com/claude-code
