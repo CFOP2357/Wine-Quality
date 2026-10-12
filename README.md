@@ -185,7 +185,8 @@ si se omite `--run-id`) y agrega la columna `prediction` al CSV de entrada.
   guardan en `data/processed/` y todo lo aprendido (imputación, normalización,
   escalado) vive dentro del pipeline, ajustado únicamente con train.
 - El notebook de la Actividad 2 se conserva en `notebooks/` **solo como registro del
-  EDA**; la lógica reproducible vive en el paquete `wine_quality/`.
+  EDA**; sus celdas de entrenamiento pertenecen a esa actividad y quedaron superadas por
+  el script — la lógica reproducible vive en el paquete `wine_quality/`.
 
 ## Solución de problemas
 
