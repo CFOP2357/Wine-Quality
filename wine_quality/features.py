@@ -1,29 +1,79 @@
-from pathlib import Path
+"""Preprocesamiento de features para Wine Quality.
 
-from loguru import logger
-from tqdm import tqdm
-import typer
+Devuelve transformadores SIN ajustar: el fit() ocurre dentro del pipeline del
+modelo y aprende únicamente de la partición de entrenamiento (evita fuga de
+datos; ver scikit-learn Common Pitfalls).
 
-from wine_quality.config import PROCESSED_DATA_DIR
+Los pasos numéricos son configurables por corrida (--normalizer, --scaler):
+así el preprocesamiento se vuelve un hiperparámetro más del experimento
+(p. ej. los árboles no requieren escalado, la regresión lineal sí se beneficia).
+"""
 
-app = typer.Typer()
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import (
+    MinMaxScaler,
+    OneHotEncoder,
+    PowerTransformer,
+    StandardScaler,
+)
+
+from wine_quality.config import TARGET
+
+# Opciones de cada paso numérico; "none" omite el paso.
+NORMALIZERS = {
+    "yeo-johnson": lambda: PowerTransformer(method="yeo-johnson", standardize=False),
+    "none": None,
+}
+SCALERS = {
+    "standard": StandardScaler,
+    "minmax": MinMaxScaler,
+    "none": None,
+}
 
 
-@app.command()
-def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
-    input_path: Path = PROCESSED_DATA_DIR / "dataset.csv",
-    output_path: Path = PROCESSED_DATA_DIR / "features.csv",
-    # -----------------------------------------
-):
-    # ---- REPLACE THIS WITH YOUR OWN CODE ----
-    logger.info("Generating features from dataset...")
-    for i in tqdm(range(10), total=10):
-        if i == 5:
-            logger.info("Something happened for iteration 5.")
-    logger.success("Features generation complete.")
-    # -----------------------------------------
+def feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """Identifica columnas numéricas y categóricas (excluyendo el target)."""
+    features = df.drop(columns=[TARGET])
+    num_cols = features.select_dtypes(include="number").columns.tolist()
+    cat_cols = features.select_dtypes(exclude="number").columns.tolist()
+    return num_cols, cat_cols
 
 
-if __name__ == "__main__":
-    app()
+def build_preprocessor(
+    num_cols: list[str],
+    cat_cols: list[str],
+    normalizer: str = "yeo-johnson",
+    scaler: str = "standard",
+) -> ColumnTransformer:
+    """Preprocesador configurable (defaults = decisiones documentadas en el EDA):
+
+    - Numéricas: imputación mediana (robusta a la asimetría) -> normalización
+      Yeo-Johnson (corrige colas pesadas sin eliminar outliers) -> estandarización
+      (media 0 / desviación 1). Normalización y escalado pueden cambiarse u
+      omitirse por corrida.
+    - Categóricas: imputación moda -> one-hot ('tipo' en columnas binarias).
+    """
+    num_steps: list[tuple] = [("imputer", SimpleImputer(strategy="median"))]
+    if NORMALIZERS[normalizer] is not None:
+        num_steps.append(("normalizer", NORMALIZERS[normalizer]()))
+    if SCALERS[scaler] is not None:
+        num_steps.append(("scaler", SCALERS[scaler]()))
+
+    return ColumnTransformer(
+        [
+            ("num", Pipeline(num_steps), num_cols),
+            (
+                "cat",
+                Pipeline(
+                    [
+                        ("imputer", SimpleImputer(strategy="most_frequent")),
+                        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+                    ]
+                ),
+                cat_cols,
+            ),
+        ]
+    )

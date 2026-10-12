@@ -21,6 +21,24 @@ MODELS_DIR = PROJ_ROOT / "models"
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
+# ===================== CONFIGURACIÓN DEL EXPERIMENTO =====================
+# Datos crudos (UCI Wine Quality; separador ';')
+RED_PATH = RAW_DATA_DIR / "winequality-red.csv"
+WHITE_PATH = RAW_DATA_DIR / "winequality-white.csv"
+
+TARGET = "quality"
+
+# Partición 70 % entrenamiento / 15 % validación / 15 % prueba
+VAL_SIZE = 0.15
+TEST_SIZE = 0.15
+
+# Semilla por defecto (sobreescribible con --seed en el script de entrenamiento)
+DEFAULT_SEED = 42
+
+# MLflow (se usa en el paso de instrumentación)
+EXPERIMENT_NAME = "TC5061_Actividad3_Experimentacion"
+MLFLOW_TRACKING_URI = f"sqlite:///{(PROJ_ROOT / 'mlflow.db').as_posix()}"
+
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135
 try:

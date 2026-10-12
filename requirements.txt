@@ -1,5 +1,13 @@
 loguru
+matplotlib
 mkdocs
+mlflow
+numpy
+pandas
+scikit-learn
+scipy
+seaborn
+xgboost
 pip
 python-dotenv
 ruff
